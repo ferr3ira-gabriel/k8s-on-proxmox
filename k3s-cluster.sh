@@ -18,13 +18,16 @@
 
 REPO_URL="https://raw.githubusercontent.com/ferr3ira-gabriel/k8s-on-proxmox/main"
 
-# Set whiptail colors for better readability
+# Set whiptail colors for better readability (black text on pink background)
 export NEWT_COLORS='
-root=,black
-window=,black
-border=white,black
-textbox=white,black
-button=black,white
+root=black,magenta
+window=black,magenta
+border=black,magenta
+textbox=black,magenta
+button=white,black
+listbox=black,magenta
+actlistbox=black,white
+actsellistbox=black,white
 '
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
