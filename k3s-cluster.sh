@@ -665,9 +665,12 @@ run_phase_7() {
   if [[ "$var_install_helm" == "yes" ]]; then
     install_helm "$CONTROL_CTID"
     
+    msg_info "Waiting for cluster to stabilize"
+    sleep 10
+    
+    install_metrics_server "$CONTROL_CTID"
+    
     if [[ "$var_install_nginx" == "yes" ]]; then
-      msg_info "Waiting for cluster to stabilize"
-      sleep 10
       install_nginx_ingress "$CONTROL_CTID"
     fi
   else
