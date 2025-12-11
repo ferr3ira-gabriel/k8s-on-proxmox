@@ -475,6 +475,11 @@ install_ohmyzsh() {
   
   # Ensure zsh is default shell
   pct exec "$ctid" -- chsh -s /bin/zsh root 2>/dev/null || true
+  
+  # Add exec zsh to .bashrc for Proxmox console compatibility
+  if ! pct exec "$ctid" -- grep -q "exec zsh" /root/.bashrc 2>/dev/null; then
+    pct exec "$ctid" -- bash -c 'echo "exec zsh" >> /root/.bashrc'
+  fi
 }
 
 cleanup_on_error() {
