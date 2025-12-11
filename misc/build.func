@@ -443,29 +443,6 @@ install_nginx_ingress() {
   msg_ok_nl "Installed NGINX Ingress Controller"
 }
 
-install_metrics_server() {
-  local ctid="$1"
-  
-  # Check if metrics-server is already installed
-  if pct exec "$ctid" -- bash -c "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && kubectl get deployment metrics-server -n kube-system 2>/dev/null" | grep -q metrics-server; then
-    msg_ok "Metrics Server already installed"
-    return 0
-  fi
-  
-  msg_start "Installing Metrics Server"
-  pct exec "$ctid" -- bash -c "
-    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-    export PATH=\$PATH:/usr/local/bin
-    helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ 2>/dev/null || true
-    helm repo update
-    helm install metrics-server metrics-server/metrics-server \
-      --namespace kube-system \
-      --set args[0]='--kubelet-insecure-tls' \
-      --wait=false
-  "
-  msg_ok_nl "Installed Metrics Server"
-}
-
 install_ohmyzsh() {
   local ctid="$1"
   local hostname="$2"
