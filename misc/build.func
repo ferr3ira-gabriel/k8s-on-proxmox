@@ -43,9 +43,19 @@ msg_info() {
   echo -ne " ${HOLD} ${YW}${msg}...${CL}"
 }
 
+msg_start() {
+  local msg="$1"
+  echo -e " ${HOLD} ${YW}${msg}...${CL}"
+}
+
 msg_ok() {
   local msg="$1"
   echo -e "${BFR} ${CM} ${GN}${msg}${CL}"
+}
+
+msg_ok_nl() {
+  local msg="$1"
+  echo -e " ${CM} ${GN}${msg}${CL}"
 }
 
 msg_error() {
@@ -109,10 +119,9 @@ download_template() {
     return 0
   fi
   
-  msg_info "Downloading template ${template}"
-  echo ""  # New line for download progress
+  msg_start "Downloading template ${template}"
   if pveam download "$storage" "$template"; then
-    msg_ok "Downloaded template ${template}"
+    msg_ok_nl "Downloaded template ${template}"
   else
     msg_error "Failed to download template ${template}"
     return 1
@@ -248,7 +257,7 @@ create_lxc_container() {
   local password="${11}"
   local bridge="${12:-vmbr0}"
   
-  msg_info "Creating LXC container ${ctid} (${hostname})"
+  msg_start "Creating LXC container ${ctid} (${hostname})"
   
   pct create "$ctid" "${template_storage}:vztmpl/${template}" \
     --hostname "$hostname" \
@@ -262,25 +271,25 @@ create_lxc_container() {
     --onboot 1 \
     --start 0
   
-  msg_ok "Created LXC container ${ctid} (${hostname})"
+  msg_ok_nl "Created LXC container ${ctid} (${hostname})"
 }
 
 start_container() {
   local ctid="$1"
   
-  msg_info "Starting container ${ctid}"
+  msg_start "Starting container ${ctid}"
   pct start "$ctid"
   wait_for_container "$ctid"
-  msg_ok "Started container ${ctid}"
+  msg_ok_nl "Started container ${ctid}"
 }
 
 ensure_curl_installed() {
   local ctid="$1"
   
   if ! pct exec "$ctid" -- which curl &>/dev/null; then
-    echo -e " - Installing curl on container ${ctid}..."
+    msg_start "Installing curl on container ${ctid}"
     pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl"
-    msg_ok "Installed curl on container ${ctid}"
+    msg_ok_nl "Installed curl on container ${ctid}"
   fi
 }
 
@@ -290,11 +299,9 @@ install_k3s_control() {
   
   ensure_curl_installed "$ctid"
   
-  msg_info "Installing K3s control plane on ${node_name}"
-  
+  msg_start "Installing K3s control plane on ${node_name}"
   pct exec "$ctid" -- bash -c "curl -sfL https://get.k3s.io | sh -s - --disable traefik --node-name ${node_name}"
-  
-  msg_ok "Installed K3s control plane on ${node_name}"
+  msg_ok_nl "Installed K3s control plane on ${node_name}"
 }
 
 get_k3s_token() {
@@ -315,11 +322,9 @@ install_k3s_worker() {
   
   ensure_curl_installed "$ctid"
   
-  msg_info "Joining worker ${node_name} to cluster"
-  
+  msg_start "Joining worker ${node_name} to cluster"
   pct exec "$ctid" -- bash -c "curl -sfL https://get.k3s.io | K3S_URL=https://${control_ip}:6443 K3S_TOKEN=${token} sh -s - --node-name ${node_name}"
-  
-  msg_ok "Joined worker ${node_name} to cluster"
+  msg_ok_nl "Joined worker ${node_name} to cluster"
 }
 
 install_helm() {
@@ -327,38 +332,33 @@ install_helm() {
   
   ensure_curl_installed "$ctid"
   
-  msg_info "Installing Helm"
-  
+  msg_start "Installing Helm"
   pct exec "$ctid" -- bash -c "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
-  
-  msg_ok "Installed Helm"
+  msg_ok_nl "Installed Helm"
 }
 
 install_nginx_ingress() {
   local ctid="$1"
   
-  msg_info "Installing NGINX Ingress Controller"
-  
+  msg_start "Installing NGINX Ingress Controller"
   pct exec "$ctid" -- bash -c "
     export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
     helm repo update
     helm install nginx-ingress ingress-nginx/ingress-nginx --set controller.publishService.enabled=true
   "
-  
-  msg_ok "Installed NGINX Ingress Controller"
+  msg_ok_nl "Installed NGINX Ingress Controller"
 }
 
 install_ohmyzsh() {
   local ctid="$1"
   local hostname="$2"
   
-  msg_info "Installing base packages on ${hostname}"
-  pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl git telnet zsh" &>/dev/null
-  msg_ok "Installed base packages on ${hostname}"
+  msg_start "Installing base packages on ${hostname}"
+  pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl git telnet zsh"
+  msg_ok_nl "Installed base packages on ${hostname}"
   
-  msg_info "Installing Oh My Zsh on ${hostname}"
-  # Install Oh My Zsh non-interactively
+  msg_start "Installing Oh My Zsh on ${hostname}"
   pct exec "$ctid" -- bash -c '
     export RUNZSH=no
     export CHSH=no
@@ -371,7 +371,7 @@ install_ohmyzsh() {
   # Set zsh as default shell
   pct exec "$ctid" -- chsh -s /bin/zsh root
   
-  msg_ok "Installed Oh My Zsh with fino theme on ${hostname}"
+  msg_ok_nl "Installed Oh My Zsh with fino theme on ${hostname}"
 }
 
 cleanup_on_error() {
