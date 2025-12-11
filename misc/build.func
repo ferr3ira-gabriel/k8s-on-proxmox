@@ -431,7 +431,7 @@ install_nginx_ingress() {
   fi
   
   msg_start "Installing NGINX Ingress Controller"
-  pct exec "$ctid" -- bash -c "
+  timeout 120 pct exec "$ctid" -- bash -c "
     export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
     export PATH=\$PATH:/usr/local/bin
     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx 2>/dev/null || true
@@ -439,7 +439,7 @@ install_nginx_ingress() {
     helm install nginx-ingress ingress-nginx/ingress-nginx \
       --set controller.publishService.enabled=true \
       --wait=false
-  "
+  " || true
   msg_ok_nl "Installed NGINX Ingress Controller"
 }
 
