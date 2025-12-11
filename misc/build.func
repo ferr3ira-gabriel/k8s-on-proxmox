@@ -278,8 +278,8 @@ ensure_curl_installed() {
   local ctid="$1"
   
   if ! pct exec "$ctid" -- which curl &>/dev/null; then
-    msg_info "Installing curl on container ${ctid}"
-    pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl" &>/dev/null
+    echo -e " - Installing curl on container ${ctid}..."
+    pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl"
     msg_ok "Installed curl on container ${ctid}"
   fi
 }
