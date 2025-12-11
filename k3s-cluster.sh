@@ -12,14 +12,15 @@
 # - 2 Worker nodes
 # Running on Proxmox LXC containers
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_URL="https://raw.githubusercontent.com/ferr3ira-gabriel/k8s-on-proxmox/main"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
-# Source helper functions
-if [[ -f "${SCRIPT_DIR}/misc/build.func" ]]; then
+# Source helper functions (local or remote)
+if [[ -n "$SCRIPT_DIR" ]] && [[ -f "${SCRIPT_DIR}/misc/build.func" ]]; then
   source "${SCRIPT_DIR}/misc/build.func"
 else
-  echo "Error: Helper functions not found. Please ensure misc/build.func exists."
-  exit 1
+  echo "Fetching helper functions from GitHub..."
+  source <(curl -fsSL "${REPO_URL}/misc/build.func")
 fi
 
 # Default configuration
