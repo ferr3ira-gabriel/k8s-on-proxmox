@@ -28,7 +28,7 @@ declare -A PHASES=(
   [1]="Create LXC Containers"
   [2]="Configure LXC for K3s"
   [3]="Start Containers & Setup"
-  [4]="Install Oh My Zsh"
+  [4]="Install Base Packages & Shell"
   [5]="Install K3s Control Plane"
   [6]="Join Worker Nodes"
   [7]="Install Helm & NGINX Ingress"
@@ -603,7 +603,7 @@ ensure_containers_running() {
 run_phase_4() {
   echo ""
   echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
-  echo -e "${BL}  Phase 4: Installing Oh My Zsh on All Nodes${CL}"
+  echo -e "${BL}  Phase 4: Installing Base Packages & Shell${CL}"
   echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
   echo ""
   
