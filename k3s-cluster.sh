@@ -31,6 +31,7 @@ listbox=black,lightgray
 actlistbox=black,cyan
 actsellistbox=black,cyan
 compactbutton=black,lightgray
+entry=black,white
 '
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
