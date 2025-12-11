@@ -688,6 +688,7 @@ run_phase_7() {
     if [[ "$var_install_nginx" == "yes" ]]; then
       msg_info "Waiting for cluster to stabilize"
       sleep 10
+      msg_ok "Cluster stable"
       install_nginx_ingress "$CONTROL_CTID"
     fi
   else
