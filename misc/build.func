@@ -473,8 +473,8 @@ install_ohmyzsh() {
   # Ensure fino theme is set
   pct exec "$ctid" -- bash -c 'sed -i "s/ZSH_THEME=\"robbyrussell\"/ZSH_THEME=\"fino\"/" ~/.zshrc' 2>/dev/null || true
   
-  # Ensure zsh is default shell
-  pct exec "$ctid" -- chsh -s /bin/zsh root 2>/dev/null || true
+  # Ensure zsh is default shell (use usermod to avoid password prompt)
+  pct exec "$ctid" -- usermod -s /bin/zsh root 2>/dev/null || true
   
   # Add exec zsh to .bashrc for Proxmox console compatibility
   if ! pct exec "$ctid" -- grep -q "exec zsh" /root/.bashrc 2>/dev/null; then
