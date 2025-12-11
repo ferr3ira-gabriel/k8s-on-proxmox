@@ -172,6 +172,17 @@ setup_kmsg_in_container() {
   
   msg_info "Setting up /dev/kmsg in container ${ctid}"
   
+  # Wait for systemd to be ready
+  local retries=30
+  while ! pct exec "$ctid" -- systemctl is-system-running &>/dev/null; do
+    retries=$((retries - 1))
+    if [[ $retries -le 0 ]]; then
+      msg_warn "Systemd not fully ready, continuing anyway..."
+      break
+    fi
+    sleep 1
+  done
+  
   # Create the kmsg script
   pct exec "$ctid" -- bash -c 'cat > /usr/local/bin/conf-kmsg.sh << "KMSGEOF"
 #!/bin/sh -e
@@ -199,8 +210,11 @@ WantedBy=default.target
 SVCEOF'
   
   # Enable and start the service
-  pct exec "$ctid" -- systemctl daemon-reload
-  pct exec "$ctid" -- systemctl enable --now conf-kmsg
+  pct exec "$ctid" -- systemctl daemon-reload 2>/dev/null || sleep 2
+  pct exec "$ctid" -- systemctl enable --now conf-kmsg 2>/dev/null || true
+  
+  # Run the script manually as fallback
+  pct exec "$ctid" -- /usr/local/bin/conf-kmsg.sh 2>/dev/null || true
   
   msg_ok "Set up /dev/kmsg in container ${ctid}"
 }
