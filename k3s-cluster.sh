@@ -86,7 +86,7 @@ show_config_summary() {
 }
 
 collect_settings() {
-  # Storage selection
+  # Storage selection for containers (rootdir)
   local storage_list
   storage_list=$(pvesm status -content rootdir 2>/dev/null | awk 'NR>1 {print $1, $1}') || true
   
@@ -95,10 +95,32 @@ collect_settings() {
     exit 1
   fi
   
-  STORAGE=$(whiptail --backtitle "K3s on Proxmox LXC" --title "STORAGE" --menu \
+  STORAGE=$(whiptail --backtitle "K3s on Proxmox LXC" --title "CONTAINER STORAGE" --menu \
     "Select storage for containers:" 12 50 4 \
     $storage_list \
     3>&1 1>&2 2>&3) || exit 1
+  
+  # Storage selection for templates (vztmpl)
+  local template_storage_list
+  template_storage_list=$(pvesm status -content vztmpl 2>/dev/null | awk 'NR>1 {print $1, $1}') || true
+  
+  if [[ -z "$template_storage_list" ]]; then
+    msg_error "No storage available for templates. Enable 'vztmpl' content on a storage."
+    exit 1
+  fi
+  
+  # Auto-select if only one template storage, otherwise ask
+  local template_count
+  template_count=$(echo "$template_storage_list" | wc -w)
+  if [[ $template_count -eq 2 ]]; then
+    TEMPLATE_STORAGE=$(echo "$template_storage_list" | awk '{print $1}')
+    msg_ok "Using ${TEMPLATE_STORAGE} for templates"
+  else
+    TEMPLATE_STORAGE=$(whiptail --backtitle "K3s on Proxmox LXC" --title "TEMPLATE STORAGE" --menu \
+      "Select storage for templates:" 12 50 4 \
+      $template_storage_list \
+      3>&1 1>&2 2>&3) || exit 1
+  fi
   
   # Update template list
   msg_info "Updating template list"
@@ -119,7 +141,7 @@ collect_settings() {
     $(echo "$available_templates" | while read t; do echo "$t $t"; done) \
     3>&1 1>&2 2>&3) || exit 1
   
-  download_template "$STORAGE" "$var_os_template" || exit 1
+  download_template "$TEMPLATE_STORAGE" "$var_os_template" || exit 1
   
   # Network configuration
   GATEWAY=$(whiptail --backtitle "K3s on Proxmox LXC" --title "GATEWAY" --inputbox \
@@ -229,19 +251,19 @@ create_cluster() {
   echo -e "\n${BL}Phase 1: Creating LXC Containers${CL}\n"
   
   # Control Plane
-  create_lxc_container "$CONTROL_CTID" "control.k8s" "$var_os_template" "$STORAGE" \
+  create_lxc_container "$CONTROL_CTID" "control.k8s" "$var_os_template" "$STORAGE" "$TEMPLATE_STORAGE" \
     "$var_control_cpu" "$var_control_ram" "$var_control_disk" \
     "$CONTROL_IP" "$GATEWAY" "$CT_PASSWORD" "$var_bridge"
   CREATED_CTIDS+=("$CONTROL_CTID")
   
   # Worker 1
-  create_lxc_container "$WORKER1_CTID" "worker-1.k8s" "$var_os_template" "$STORAGE" \
+  create_lxc_container "$WORKER1_CTID" "worker-1.k8s" "$var_os_template" "$STORAGE" "$TEMPLATE_STORAGE" \
     "$var_worker_cpu" "$var_worker_ram" "$var_worker_disk" \
     "$WORKER1_IP" "$GATEWAY" "$CT_PASSWORD" "$var_bridge"
   CREATED_CTIDS+=("$WORKER1_CTID")
   
   # Worker 2
-  create_lxc_container "$WORKER2_CTID" "worker-2.k8s" "$var_os_template" "$STORAGE" \
+  create_lxc_container "$WORKER2_CTID" "worker-2.k8s" "$var_os_template" "$STORAGE" "$TEMPLATE_STORAGE" \
     "$var_worker_cpu" "$var_worker_ram" "$var_worker_disk" \
     "$WORKER2_IP" "$GATEWAY" "$CT_PASSWORD" "$var_bridge"
   CREATED_CTIDS+=("$WORKER2_CTID")

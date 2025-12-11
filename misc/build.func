@@ -225,17 +225,18 @@ create_lxc_container() {
   local hostname="$2"
   local template="$3"
   local storage="$4"
-  local cores="$5"
-  local memory="$6"
-  local disk="$7"
-  local ip="$8"
-  local gateway="$9"
-  local password="${10}"
-  local bridge="${11:-vmbr0}"
+  local template_storage="$5"
+  local cores="$6"
+  local memory="$7"
+  local disk="$8"
+  local ip="$9"
+  local gateway="${10}"
+  local password="${11}"
+  local bridge="${12:-vmbr0}"
   
   msg_info "Creating LXC container ${ctid} (${hostname})"
   
-  pct create "$ctid" "${storage}:vztmpl/${template}" \
+  pct create "$ctid" "${template_storage}:vztmpl/${template}" \
     --hostname "$hostname" \
     --cores "$cores" \
     --memory "$memory" \
