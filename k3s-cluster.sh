@@ -23,6 +23,227 @@ else
   source <(curl -fsSL "${REPO_URL}/misc/build.func")
 fi
 
+# Phase definitions
+declare -A PHASES=(
+  [1]="Create LXC Containers"
+  [2]="Configure LXC for K3s"
+  [3]="Start Containers & Setup"
+  [4]="Install Oh My Zsh"
+  [5]="Install K3s Control Plane"
+  [6]="Join Worker Nodes"
+  [7]="Install Helm & NGINX Ingress"
+)
+
+START_PHASE=1
+RESUME_MODE=false
+
+show_usage() {
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Options:
+  -h, --help              Show this help message
+  -l, --list-phases       List all phases
+  -s, --status            Check status of existing containers
+  -p, --start-phase NUM   Start from phase NUM (1-7)
+  -r, --resume            Auto-detect and resume from last completed phase
+
+Phases:
+EOF
+  for i in $(seq 1 7); do
+    echo "  $i. ${PHASES[$i]}"
+  done
+  echo ""
+  exit 0
+}
+
+list_phases() {
+  header_info
+  echo -e "\n${BL}Available Phases:${CL}\n"
+  for i in $(seq 1 7); do
+    echo -e "  ${GN}Phase $i:${CL} ${PHASES[$i]}"
+  done
+  echo ""
+  exit 0
+}
+
+check_container_status() {
+  local ctid="$1"
+  local check="$2"
+  
+  case "$check" in
+    exists)
+      pct status "$ctid" &>/dev/null
+      ;;
+    running)
+      [[ "$(pct status "$ctid" 2>/dev/null | awk '{print $2}')" == "running" ]]
+      ;;
+    has_k3s)
+      pct exec "$ctid" -- test -f /usr/local/bin/k3s 2>/dev/null
+      ;;
+    has_zsh)
+      pct exec "$ctid" -- test -d /root/.oh-my-zsh 2>/dev/null
+      ;;
+    has_kmsg)
+      pct exec "$ctid" -- test -f /usr/local/bin/conf-kmsg.sh 2>/dev/null
+      ;;
+    is_control)
+      pct exec "$ctid" -- test -f /var/lib/rancher/k3s/server/node-token 2>/dev/null
+      ;;
+  esac
+}
+
+detect_cluster_containers() {
+  # Find containers with k8s hostnames
+  local found_control=""
+  local found_worker1=""
+  local found_worker2=""
+  
+  for ctid in $(pct list 2>/dev/null | awk 'NR>1 {print $1}'); do
+    local hostname=$(pct config "$ctid" 2>/dev/null | grep "^hostname:" | awk '{print $2}')
+    case "$hostname" in
+      control.k8s) found_control="$ctid" ;;
+      worker-1.k8s) found_worker1="$ctid" ;;
+      worker-2.k8s) found_worker2="$ctid" ;;
+    esac
+  done
+  
+  echo "$found_control $found_worker1 $found_worker2"
+}
+
+show_status() {
+  header_info
+  echo -e "\n${BL}Cluster Status:${CL}\n"
+  
+  read -r CONTROL_CTID WORKER1_CTID WORKER2_CTID <<< "$(detect_cluster_containers)"
+  
+  if [[ -z "$CONTROL_CTID" ]] && [[ -z "$WORKER1_CTID" ]] && [[ -z "$WORKER2_CTID" ]]; then
+    echo -e "  ${YW}No K3s cluster containers found.${CL}"
+    echo -e "  Run the script without arguments to create a new cluster.\n"
+    exit 0
+  fi
+  
+  echo -e "  ${YW}Detected Containers:${CL}"
+  
+  for role in "control:$CONTROL_CTID:control.k8s" "worker1:$WORKER1_CTID:worker-1.k8s" "worker2:$WORKER2_CTID:worker-2.k8s"; do
+    IFS=':' read -r name ctid hostname <<< "$role"
+    if [[ -n "$ctid" ]]; then
+      local status=$(pct status "$ctid" 2>/dev/null | awk '{print $2}')
+      local status_color="${RD}"
+      [[ "$status" == "running" ]] && status_color="${GN}"
+      echo -e "    ${TAB}${hostname} (CT $ctid): ${status_color}${status}${CL}"
+    else
+      echo -e "    ${TAB}${hostname}: ${RD}not found${CL}"
+    fi
+  done
+  
+  echo -e "\n  ${YW}Phase Status:${CL}"
+  
+  local last_phase=0
+  
+  # Check Phase 1: Containers exist
+  if [[ -n "$CONTROL_CTID" ]] && [[ -n "$WORKER1_CTID" ]] && [[ -n "$WORKER2_CTID" ]]; then
+    echo -e "    ${CM} Phase 1: ${PHASES[1]}"
+    last_phase=1
+  else
+    echo -e "    ${CROSS} Phase 1: ${PHASES[1]}"
+  fi
+  
+  # Check Phase 2: LXC configured (check conf file)
+  if [[ $last_phase -ge 1 ]] && grep -q "lxc.apparmor.profile" "/etc/pve/lxc/${CONTROL_CTID}.conf" 2>/dev/null; then
+    echo -e "    ${CM} Phase 2: ${PHASES[2]}"
+    last_phase=2
+  elif [[ $last_phase -ge 1 ]]; then
+    echo -e "    ${CROSS} Phase 2: ${PHASES[2]}"
+  fi
+  
+  # Check Phase 3: Containers running with kmsg
+  if [[ $last_phase -ge 2 ]] && check_container_status "$CONTROL_CTID" running && check_container_status "$CONTROL_CTID" has_kmsg; then
+    echo -e "    ${CM} Phase 3: ${PHASES[3]}"
+    last_phase=3
+  elif [[ $last_phase -ge 2 ]]; then
+    echo -e "    ${CROSS} Phase 3: ${PHASES[3]}"
+  fi
+  
+  # Check Phase 4: Oh My Zsh installed
+  if [[ $last_phase -ge 3 ]] && check_container_status "$CONTROL_CTID" has_zsh; then
+    echo -e "    ${CM} Phase 4: ${PHASES[4]}"
+    last_phase=4
+  elif [[ $last_phase -ge 3 ]]; then
+    echo -e "    ${CROSS} Phase 4: ${PHASES[4]}"
+  fi
+  
+  # Check Phase 5: K3s control plane
+  if [[ $last_phase -ge 4 ]] && check_container_status "$CONTROL_CTID" is_control; then
+    echo -e "    ${CM} Phase 5: ${PHASES[5]}"
+    last_phase=5
+  elif [[ $last_phase -ge 4 ]]; then
+    echo -e "    ${CROSS} Phase 5: ${PHASES[5]}"
+  fi
+  
+  # Check Phase 6: Workers joined
+  if [[ $last_phase -ge 5 ]] && check_container_status "$WORKER1_CTID" has_k3s && check_container_status "$WORKER2_CTID" has_k3s; then
+    echo -e "    ${CM} Phase 6: ${PHASES[6]}"
+    last_phase=6
+  elif [[ $last_phase -ge 5 ]]; then
+    echo -e "    ${CROSS} Phase 6: ${PHASES[6]}"
+  fi
+  
+  # Check Phase 7: Helm/NGINX
+  if [[ $last_phase -ge 6 ]] && pct exec "$CONTROL_CTID" -- which helm &>/dev/null; then
+    echo -e "    ${CM} Phase 7: ${PHASES[7]}"
+    last_phase=7
+  elif [[ $last_phase -ge 6 ]]; then
+    echo -e "    ${CROSS} Phase 7: ${PHASES[7]}"
+  fi
+  
+  echo ""
+  if [[ $last_phase -lt 7 ]]; then
+    local next_phase=$((last_phase + 1))
+    echo -e "  ${YW}Resume with:${CL} $0 --start-phase $next_phase"
+  else
+    echo -e "  ${GN}Cluster setup complete!${CL}"
+  fi
+  echo ""
+  
+  exit 0
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        show_usage
+        ;;
+      -l|--list-phases)
+        list_phases
+        ;;
+      -s|--status)
+        show_status
+        ;;
+      -p|--start-phase)
+        if [[ -n "$2" ]] && [[ "$2" =~ ^[1-7]$ ]]; then
+          START_PHASE="$2"
+          RESUME_MODE=true
+          shift
+        else
+          echo "Error: --start-phase requires a number between 1 and 7"
+          exit 1
+        fi
+        ;;
+      -r|--resume)
+        RESUME_MODE=true
+        # Auto-detect will happen later
+        ;;
+      *)
+        echo "Unknown option: $1"
+        show_usage
+        ;;
+    esac
+    shift
+  done
+}
+
 # Default configuration
 APP="K3s Cluster"
 var_control_cpu="${var_control_cpu:-4}"
@@ -242,87 +463,83 @@ collect_settings() {
   WORKER2_CTID=$(get_next_ct_id $((WORKER1_CTID + 1)))
 }
 
-create_cluster() {
-  local control_ip_clean="${CONTROL_IP%/*}"
-  local worker1_ip_clean="${WORKER1_IP%/*}"
-  local worker2_ip_clean="${WORKER2_IP%/*}"
-  
-  # Phase 1: Create LXC Containers
+run_phase_1() {
   echo -e "\n${BL}Phase 1: Creating LXC Containers${CL}\n"
   
-  # Control Plane
   create_lxc_container "$CONTROL_CTID" "control.k8s" "$var_os_template" "$STORAGE" "$TEMPLATE_STORAGE" \
     "$var_control_cpu" "$var_control_ram" "$var_control_disk" \
     "$CONTROL_IP" "$GATEWAY" "$CT_PASSWORD" "$var_bridge"
   CREATED_CTIDS+=("$CONTROL_CTID")
   
-  # Worker 1
   create_lxc_container "$WORKER1_CTID" "worker-1.k8s" "$var_os_template" "$STORAGE" "$TEMPLATE_STORAGE" \
     "$var_worker_cpu" "$var_worker_ram" "$var_worker_disk" \
     "$WORKER1_IP" "$GATEWAY" "$CT_PASSWORD" "$var_bridge"
   CREATED_CTIDS+=("$WORKER1_CTID")
   
-  # Worker 2
   create_lxc_container "$WORKER2_CTID" "worker-2.k8s" "$var_os_template" "$STORAGE" "$TEMPLATE_STORAGE" \
     "$var_worker_cpu" "$var_worker_ram" "$var_worker_disk" \
     "$WORKER2_IP" "$GATEWAY" "$CT_PASSWORD" "$var_bridge"
   CREATED_CTIDS+=("$WORKER2_CTID")
-  
-  # Phase 2: Configure LXC for K3s (apparmor, cgroup, capabilities)
+}
+
+run_phase_2() {
   echo -e "\n${BL}Phase 2: Configuring LXC Containers for K3s${CL}\n"
   
   configure_lxc_for_k3s "$CONTROL_CTID"
   configure_lxc_for_k3s "$WORKER1_CTID"
   configure_lxc_for_k3s "$WORKER2_CTID"
+}
+
+run_phase_3() {
+  echo -e "\n${BL}Phase 3: Starting Containers & Setup${CL}\n"
   
-  # Phase 3: Start containers and push kernel config
-  echo -e "\n${BL}Phase 3: Starting Containers${CL}\n"
-  
-  start_container "$CONTROL_CTID"
-  push_kernel_config "$CONTROL_CTID"
-  setup_kmsg_in_container "$CONTROL_CTID"
-  
-  start_container "$WORKER1_CTID"
-  push_kernel_config "$WORKER1_CTID"
-  setup_kmsg_in_container "$WORKER1_CTID"
-  
-  start_container "$WORKER2_CTID"
-  push_kernel_config "$WORKER2_CTID"
-  setup_kmsg_in_container "$WORKER2_CTID"
-  
-  # Phase 4: Install Oh My Zsh on all nodes
+  for ctid in "$CONTROL_CTID" "$WORKER1_CTID" "$WORKER2_CTID"; do
+    if [[ "$(pct status "$ctid" 2>/dev/null | awk '{print $2}')" != "running" ]]; then
+      start_container "$ctid"
+    else
+      msg_ok "Container ${ctid} already running"
+    fi
+    push_kernel_config "$ctid"
+    setup_kmsg_in_container "$ctid"
+  done
+}
+
+run_phase_4() {
   echo -e "\n${BL}Phase 4: Installing Oh My Zsh on All Nodes${CL}\n"
   
   install_ohmyzsh "$CONTROL_CTID" "control.k8s"
   install_ohmyzsh "$WORKER1_CTID" "worker-1.k8s"
   install_ohmyzsh "$WORKER2_CTID" "worker-2.k8s"
-  
-  # Phase 5: Install K3s on Control Plane
+}
+
+run_phase_5() {
   echo -e "\n${BL}Phase 5: Installing K3s Control Plane${CL}\n"
   
   install_k3s_control "$CONTROL_CTID" "control.k8s"
   
-  # Wait for K3s to be ready
   msg_info "Waiting for K3s to be ready"
   sleep 10
   pct exec "$CONTROL_CTID" -- kubectl wait --for=condition=Ready node/control.k8s --timeout=120s 2>/dev/null || true
   msg_ok "K3s control plane is ready"
+}
+
+run_phase_6() {
+  local control_ip_clean="${CONTROL_IP%/*}"
+  
+  echo -e "\n${BL}Phase 6: Joining Worker Nodes${CL}\n"
   
   # Get token for workers
   K3S_TOKEN=$(get_k3s_token "$CONTROL_CTID")
   
-  # Phase 6: Join Workers to Cluster
-  echo -e "\n${BL}Phase 6: Joining Worker Nodes${CL}\n"
-  
   install_k3s_worker "$WORKER1_CTID" "worker-1.k8s" "$control_ip_clean" "$K3S_TOKEN"
   install_k3s_worker "$WORKER2_CTID" "worker-2.k8s" "$control_ip_clean" "$K3S_TOKEN"
   
-  # Wait for workers to join
   msg_info "Waiting for workers to join the cluster"
   sleep 15
   msg_ok "Workers joined the cluster"
-  
-  # Phase 7: Install Helm and NGINX Ingress (optional)
+}
+
+run_phase_7() {
   if [[ "$var_install_helm" == "yes" ]]; then
     echo -e "\n${BL}Phase 7: Installing Additional Components${CL}\n"
     install_helm "$CONTROL_CTID"
@@ -332,7 +549,15 @@ create_cluster() {
       sleep 10
       install_nginx_ingress "$CONTROL_CTID"
     fi
+  else
+    echo -e "\n${BL}Phase 7: Skipped (Helm not requested)${CL}\n"
   fi
+}
+
+create_cluster() {
+  for phase in $(seq "$START_PHASE" 7); do
+    "run_phase_${phase}"
+  done
 }
 
 show_completion_info() {
@@ -369,7 +594,34 @@ show_completion_info() {
   echo -e "${GN}═══════════════════════════════════════════════════════════════${CL}\n"
 }
 
+collect_resume_settings() {
+  # Auto-detect existing containers
+  read -r CONTROL_CTID WORKER1_CTID WORKER2_CTID <<< "$(detect_cluster_containers)"
+  
+  if [[ -z "$CONTROL_CTID" ]] || [[ -z "$WORKER1_CTID" ]] || [[ -z "$WORKER2_CTID" ]]; then
+    msg_error "Could not detect all cluster containers. Run --status to check."
+    exit 1
+  fi
+  
+  msg_ok "Detected containers: Control=$CONTROL_CTID, Worker1=$WORKER1_CTID, Worker2=$WORKER2_CTID"
+  
+  # Get IPs from container configs
+  CONTROL_IP=$(pct config "$CONTROL_CTID" 2>/dev/null | grep "^net0:" | grep -oP 'ip=\K[^,]+') || true
+  WORKER1_IP=$(pct config "$WORKER1_CTID" 2>/dev/null | grep "^net0:" | grep -oP 'ip=\K[^,]+') || true
+  WORKER2_IP=$(pct config "$WORKER2_CTID" 2>/dev/null | grep "^net0:" | grep -oP 'ip=\K[^,]+') || true
+  GATEWAY=$(pct config "$CONTROL_CTID" 2>/dev/null | grep "^net0:" | grep -oP 'gw=\K[^,]+') || true
+  
+  # Set defaults for optional components
+  var_install_helm="${var_install_helm:-yes}"
+  var_install_nginx="${var_install_nginx:-yes}"
+  
+  msg_ok "Control IP: $CONTROL_IP"
+}
+
 main() {
+  # Parse command line arguments first
+  parse_args "$@"
+  
   header_info
   
   echo -e "\nThis script will create a K3s Kubernetes cluster on Proxmox LXC containers."
@@ -385,29 +637,45 @@ main() {
     exit 1
   fi
   
-  # Confirmation
-  if ! whiptail --backtitle "K3s on Proxmox LXC" --title "K3s CLUSTER SETUP" --yesno \
-    "This script will create a K3s Kubernetes cluster with:\n\n  - 1 Control Plane node\n  - 2 Worker nodes\n\nAll running on Proxmox LXC containers.\n\nContinue?" 15 60; then
-    clear
-    exit 0
-  fi
-  
-  # Collect settings via whiptail
-  collect_settings
-  
-  # Show configuration summary
-  header_info
-  show_config_summary
-  
-  # Final confirmation
-  if ! whiptail --backtitle "K3s on Proxmox LXC" --title "CONFIRM" --yesno \
-    "Ready to create the K3s cluster with the above configuration?\n\nThis will create 3 LXC containers." 10 60; then
-    clear
-    exit 0
+  if [[ "$RESUME_MODE" == true ]]; then
+    # Resume mode - detect existing containers
+    echo -e "${YW}Resume mode: Starting from Phase ${START_PHASE}${CL}\n"
+    collect_resume_settings
+    
+    # Confirmation
+    if ! whiptail --backtitle "K3s on Proxmox LXC" --title "RESUME CLUSTER SETUP" --yesno \
+      "Resume K3s cluster setup from Phase ${START_PHASE}: ${PHASES[$START_PHASE]}\n\nDetected containers:\n  - Control: CT ${CONTROL_CTID}\n  - Worker 1: CT ${WORKER1_CTID}\n  - Worker 2: CT ${WORKER2_CTID}\n\nContinue?" 15 60; then
+      clear
+      exit 0
+    fi
+  else
+    # Normal mode - create new cluster
+    # Confirmation
+    if ! whiptail --backtitle "K3s on Proxmox LXC" --title "K3s CLUSTER SETUP" --yesno \
+      "This script will create a K3s Kubernetes cluster with:\n\n  - 1 Control Plane node\n  - 2 Worker nodes\n\nAll running on Proxmox LXC containers.\n\nContinue?" 15 60; then
+      clear
+      exit 0
+    fi
+    
+    # Collect settings via whiptail
+    collect_settings
+    
+    # Show configuration summary
+    header_info
+    show_config_summary
+    
+    # Final confirmation
+    if ! whiptail --backtitle "K3s on Proxmox LXC" --title "CONFIRM" --yesno \
+      "Ready to create the K3s cluster with the above configuration?\n\nThis will create 3 LXC containers." 10 60; then
+      clear
+      exit 0
+    fi
   fi
   
   # Create cluster with error handling
-  trap 'cleanup_on_error "${CREATED_CTIDS[@]}"' ERR
+  if [[ "$RESUME_MODE" != true ]]; then
+    trap 'cleanup_on_error "${CREATED_CTIDS[@]}"' ERR
+  fi
   
   header_info
   create_cluster
