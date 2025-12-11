@@ -47,6 +47,7 @@ Options:
   -s, --status            Check status of existing containers
   -p, --start-phase NUM   Start from phase NUM (1-7)
   -r, --resume            Auto-detect and resume from last completed phase
+  -u, --uninstall         Remove all cluster containers and cleanup
 
 Phases:
 EOF
@@ -54,6 +55,49 @@ EOF
     echo "  $i. ${PHASES[$i]}"
   done
   echo ""
+  exit 0
+}
+
+uninstall_cluster() {
+  header_info
+  
+  echo -e "\n${RD}WARNING: This will destroy all K3s cluster containers!${CL}\n"
+  
+  # Detect existing containers
+  read -r CONTROL_CTID WORKER1_CTID WORKER2_CTID <<< "$(detect_cluster_containers)"
+  
+  if [[ -z "$CONTROL_CTID" ]] && [[ -z "$WORKER1_CTID" ]] && [[ -z "$WORKER2_CTID" ]]; then
+    msg_warn "No cluster containers found"
+    exit 0
+  fi
+  
+  echo -e "  ${YW}Containers to be destroyed:${CL}"
+  [[ -n "$CONTROL_CTID" ]] && echo -e "    - control.k8s (CT ${CONTROL_CTID})"
+  [[ -n "$WORKER1_CTID" ]] && echo -e "    - worker-1.k8s (CT ${WORKER1_CTID})"
+  [[ -n "$WORKER2_CTID" ]] && echo -e "    - worker-2.k8s (CT ${WORKER2_CTID})"
+  echo ""
+  
+  if ! whiptail --backtitle "K3s on Proxmox LXC" --title "CONFIRM UNINSTALL" --yesno \
+    "Are you sure you want to destroy all cluster containers?\n\nThis action cannot be undone!" 10 60; then
+    echo -e "\n${YW}Uninstall cancelled${CL}\n"
+    exit 0
+  fi
+  
+  echo ""
+  for ctid in $CONTROL_CTID $WORKER1_CTID $WORKER2_CTID; do
+    if [[ -n "$ctid" ]] && pct status "$ctid" &>/dev/null; then
+      msg_info "Stopping container ${ctid}"
+      pct stop "$ctid" 2>/dev/null || true
+      sleep 2
+      msg_ok "Stopped container ${ctid}"
+      
+      msg_info "Destroying container ${ctid}"
+      pct destroy "$ctid" 2>/dev/null || true
+      msg_ok "Destroyed container ${ctid}"
+    fi
+  done
+  
+  echo -e "\n${GN}Cluster uninstalled successfully!${CL}\n"
   exit 0
 }
 
@@ -234,6 +278,9 @@ parse_args() {
       -r|--resume)
         RESUME_MODE=true
         # Auto-detect will happen later
+        ;;
+      -u|--uninstall)
+        uninstall_cluster
         ;;
       *)
         echo "Unknown option: $1"
@@ -618,28 +665,34 @@ show_completion_info() {
   echo -e "  ${YW}Cluster Nodes:${CL}"
   pct exec "$CONTROL_CTID" -- kubectl get nodes 2>/dev/null || echo "  (Run 'kubectl get nodes' on control plane to verify)"
   
-  echo -e "\n  ${YW}To access the cluster:${CL}"
-  echo -e "    ${TAB}1. SSH into control plane: ${GN}ssh root@${control_ip_clean}${CL}"
-  echo -e "    ${TAB}2. Use kubectl: ${GN}kubectl get nodes${CL}"
-  echo -e ""
-  echo -e "  ${YW}To copy kubeconfig to your local machine:${CL}"
-  echo -e "    ${TAB}${GN}pct exec ${CONTROL_CTID} -- cat /etc/rancher/k3s/k3s.yaml > ~/.kube/config${CL}"
-  echo -e "    ${TAB}Then update the server address from 127.0.0.1 to ${GN}${control_ip_clean}${CL}"
-  echo -e ""
-  
-  if [[ "$var_install_nginx" == "yes" ]]; then
-    echo -e "  ${YW}NGINX Ingress Controller:${CL}"
-    echo -e "    ${TAB}Access any node IP on ports 80/443 to reach ingress"
-    echo -e "    ${TAB}Check status: ${GN}kubectl get svc -A | grep ingress${CL}"
-    echo -e ""
-  fi
-  
-  echo -e "  ${YW}Container IDs:${CL}"
-  echo -e "    ${TAB}Control Plane: ${GN}${CONTROL_CTID}${CL}"
+  echo -e "\n  ${YW}Container IDs:${CL}"
+  echo -e "    ${TAB}Control Plane: ${GN}${CONTROL_CTID}${CL} (${control_ip_clean})"
   echo -e "    ${TAB}Worker 1:      ${GN}${WORKER1_CTID}${CL}"
   echo -e "    ${TAB}Worker 2:      ${GN}${WORKER2_CTID}${CL}"
-  echo -e ""
+  
+  echo -e "\n  ${YW}To access the cluster:${CL}"
+  echo -e "    ${TAB}SSH: ${GN}ssh root@${control_ip_clean}${CL}"
+  echo -e "    ${TAB}kubectl: ${GN}kubectl get nodes${CL}"
+  
+  if [[ "$var_install_nginx" == "yes" ]]; then
+    echo -e "\n  ${YW}NGINX Ingress Controller:${CL}"
+    echo -e "    ${TAB}Access any node IP on ports 80/443 to reach ingress"
+    echo -e "    ${TAB}Check status: ${GN}kubectl get svc -A | grep ingress${CL}"
+  fi
+  
+  echo -e "\n  ${YW}Uninstall cluster:${CL}"
+  echo -e "    ${TAB}${GN}bash <(curl -fsSL ${REPO_URL}/k3s-cluster.sh) --uninstall${CL}"
+  
+  echo -e "\n${GN}═══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${GN}                         KUBECONFIG                            ${CL}"
   echo -e "${GN}═══════════════════════════════════════════════════════════════${CL}\n"
+  
+  echo -e "${YW}Save this to ~/.kube/config on your local machine:${CL}\n"
+  
+  # Get kubeconfig and replace localhost with actual IP
+  pct exec "$CONTROL_CTID" -- cat /etc/rancher/k3s/k3s.yaml 2>/dev/null | sed "s/127.0.0.1/${control_ip_clean}/g"
+  
+  echo -e "\n${GN}═══════════════════════════════════════════════════════════════${CL}\n"
 }
 
 collect_resume_settings() {
