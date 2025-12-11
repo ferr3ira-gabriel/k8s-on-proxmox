@@ -268,8 +268,15 @@ create_cluster() {
   push_kernel_config "$WORKER2_CTID"
   setup_kmsg_in_container "$WORKER2_CTID"
   
-  # Phase 4: Install K3s on Control Plane
-  echo -e "\n${BL}Phase 4: Installing K3s Control Plane${CL}\n"
+  # Phase 4: Install Oh My Zsh on all nodes
+  echo -e "\n${BL}Phase 4: Installing Oh My Zsh on All Nodes${CL}\n"
+  
+  install_ohmyzsh "$CONTROL_CTID" "control.k8s"
+  install_ohmyzsh "$WORKER1_CTID" "worker-1.k8s"
+  install_ohmyzsh "$WORKER2_CTID" "worker-2.k8s"
+  
+  # Phase 5: Install K3s on Control Plane
+  echo -e "\n${BL}Phase 5: Installing K3s Control Plane${CL}\n"
   
   install_k3s_control "$CONTROL_CTID" "control.k8s"
   
@@ -282,8 +289,8 @@ create_cluster() {
   # Get token for workers
   K3S_TOKEN=$(get_k3s_token "$CONTROL_CTID")
   
-  # Phase 5: Join Workers to Cluster
-  echo -e "\n${BL}Phase 5: Joining Worker Nodes${CL}\n"
+  # Phase 6: Join Workers to Cluster
+  echo -e "\n${BL}Phase 6: Joining Worker Nodes${CL}\n"
   
   install_k3s_worker "$WORKER1_CTID" "worker-1.k8s" "$control_ip_clean" "$K3S_TOKEN"
   install_k3s_worker "$WORKER2_CTID" "worker-2.k8s" "$control_ip_clean" "$K3S_TOKEN"
@@ -293,9 +300,9 @@ create_cluster() {
   sleep 15
   msg_ok "Workers joined the cluster"
   
-  # Phase 6: Install Helm and NGINX Ingress (optional)
+  # Phase 7: Install Helm and NGINX Ingress (optional)
   if [[ "$var_install_helm" == "yes" ]]; then
-    echo -e "\n${BL}Phase 6: Installing Additional Components${CL}\n"
+    echo -e "\n${BL}Phase 7: Installing Additional Components${CL}\n"
     install_helm "$CONTROL_CTID"
     
     if [[ "$var_install_nginx" == "yes" ]]; then

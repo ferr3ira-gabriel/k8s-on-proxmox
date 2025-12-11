@@ -318,6 +318,31 @@ install_nginx_ingress() {
   msg_ok "Installed NGINX Ingress Controller"
 }
 
+install_ohmyzsh() {
+  local ctid="$1"
+  local hostname="$2"
+  
+  msg_info "Installing base packages on ${hostname}"
+  pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl git telnet zsh" &>/dev/null
+  msg_ok "Installed base packages on ${hostname}"
+  
+  msg_info "Installing Oh My Zsh on ${hostname}"
+  # Install Oh My Zsh non-interactively
+  pct exec "$ctid" -- bash -c '
+    export RUNZSH=no
+    export CHSH=no
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+  '
+  
+  # Set fino theme
+  pct exec "$ctid" -- bash -c 'sed -i "s/ZSH_THEME=\"robbyrussell\"/ZSH_THEME=\"fino\"/" ~/.zshrc'
+  
+  # Set zsh as default shell
+  pct exec "$ctid" -- chsh -s /bin/zsh root
+  
+  msg_ok "Installed Oh My Zsh with fino theme on ${hostname}"
+}
+
 cleanup_on_error() {
   local ctids=("$@")
   msg_warn "Cleaning up containers due to error..."
