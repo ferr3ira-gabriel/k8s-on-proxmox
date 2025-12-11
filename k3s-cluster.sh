@@ -504,8 +504,21 @@ run_phase_3() {
   done
 }
 
+ensure_containers_running() {
+  for ctid in "$CONTROL_CTID" "$WORKER1_CTID" "$WORKER2_CTID"; do
+    if [[ "$(pct status "$ctid" 2>/dev/null | awk '{print $2}')" != "running" ]]; then
+      msg_info "Starting container ${ctid}"
+      pct start "$ctid"
+      sleep 3
+      msg_ok "Started container ${ctid}"
+    fi
+  done
+}
+
 run_phase_4() {
   echo -e "\n${BL}Phase 4: Installing Oh My Zsh on All Nodes${CL}\n"
+  
+  ensure_containers_running
   
   install_ohmyzsh "$CONTROL_CTID" "control.k8s"
   install_ohmyzsh "$WORKER1_CTID" "worker-1.k8s"
@@ -514,6 +527,8 @@ run_phase_4() {
 
 run_phase_5() {
   echo -e "\n${BL}Phase 5: Installing K3s Control Plane${CL}\n"
+  
+  ensure_containers_running
   
   install_k3s_control "$CONTROL_CTID" "control.k8s"
   
@@ -528,6 +543,8 @@ run_phase_6() {
   
   echo -e "\n${BL}Phase 6: Joining Worker Nodes${CL}\n"
   
+  ensure_containers_running
+  
   # Get token for workers
   K3S_TOKEN=$(get_k3s_token "$CONTROL_CTID")
   
@@ -540,8 +557,11 @@ run_phase_6() {
 }
 
 run_phase_7() {
+  echo -e "\n${BL}Phase 7: Installing Additional Components${CL}\n"
+  
+  ensure_containers_running
+  
   if [[ "$var_install_helm" == "yes" ]]; then
-    echo -e "\n${BL}Phase 7: Installing Additional Components${CL}\n"
     install_helm "$CONTROL_CTID"
     
     if [[ "$var_install_nginx" == "yes" ]]; then
@@ -550,7 +570,7 @@ run_phase_7() {
       install_nginx_ingress "$CONTROL_CTID"
     fi
   else
-    echo -e "\n${BL}Phase 7: Skipped (Helm not requested)${CL}\n"
+    msg_ok "Skipped (Helm not requested)"
   fi
 }
 
