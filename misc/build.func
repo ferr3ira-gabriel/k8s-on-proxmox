@@ -34,7 +34,7 @@ header_info() {
     ██║  ██╗╚█████╔╝███████║    ╚██████╔╝██║ ╚████║    ██║     ██║  ██║╚██████╔╝██╔╝ ██╗██║ ╚═╝ ██║╚██████╔╝██╔╝ ██╗
     ╚═╝  ╚═╝ ╚════╝ ╚══════╝     ╚═════╝ ╚═╝  ╚═══╝    ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝
 
-    K3s Kubernetes on Proxmox LXC | Based on tutorial by Garrett Mills
+    By @ferr3ira-gabriel | Built with Droid | Based on tutorial by Garrett Mills
 EOF
 }
 
