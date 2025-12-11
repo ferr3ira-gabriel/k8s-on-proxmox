@@ -317,9 +317,16 @@ ensure_curl_installed() {
   local ctid="$1"
   
   if ! pct exec "$ctid" -- which curl &>/dev/null; then
-    msg_start "Installing curl on container ${ctid}"
-    pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl"
-    msg_ok_nl "Installed curl on container ${ctid}"
+    msg_start "Installing curl and certificates on container ${ctid}"
+    pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl ca-certificates"
+    msg_ok_nl "Installed curl and certificates on container ${ctid}"
+  else
+    # Ensure CA certificates are installed even if curl exists
+    if ! pct exec "$ctid" -- dpkg -l ca-certificates &>/dev/null; then
+      msg_start "Installing CA certificates on container ${ctid}"
+      pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y ca-certificates"
+      msg_ok_nl "Installed CA certificates on container ${ctid}"
+    fi
   fi
 }
 
@@ -385,7 +392,7 @@ install_ohmyzsh() {
   local hostname="$2"
   
   msg_start "Installing base packages on ${hostname}"
-  pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl git telnet zsh"
+  pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl ca-certificates git telnet zsh"
   msg_ok_nl "Installed base packages on ${hostname}"
   
   msg_start "Installing Oh My Zsh on ${hostname}"
