@@ -352,6 +352,12 @@ install_k3s_control() {
   local ctid="$1"
   local node_name="$2"
   
+  # Check if K3s control plane is already installed
+  if pct exec "$ctid" -- test -f /var/lib/rancher/k3s/server/node-token 2>/dev/null; then
+    msg_ok "K3s control plane already installed on ${node_name}"
+    return 0
+  fi
+  
   ensure_curl_installed "$ctid"
   ensure_kmsg_exists "$ctid"
   
@@ -376,6 +382,14 @@ install_k3s_worker() {
   local control_ip="$3"
   local token="$4"
   
+  # Check if K3s agent is already installed
+  if pct exec "$ctid" -- test -f /usr/local/bin/k3s 2>/dev/null; then
+    msg_ok "K3s agent already installed on ${node_name}"
+    # Ensure service is running
+    pct exec "$ctid" -- systemctl start k3s-agent 2>/dev/null || true
+    return 0
+  fi
+  
   ensure_curl_installed "$ctid"
   ensure_kmsg_exists "$ctid"
   
@@ -386,6 +400,12 @@ install_k3s_worker() {
 
 install_helm() {
   local ctid="$1"
+  
+  # Check if Helm is already installed
+  if pct exec "$ctid" -- test -f /usr/local/bin/helm 2>/dev/null; then
+    msg_ok "Helm already installed"
+    return 0
+  fi
   
   ensure_curl_installed "$ctid"
   
@@ -404,6 +424,12 @@ install_helm() {
 install_nginx_ingress() {
   local ctid="$1"
   
+  # Check if NGINX ingress is already installed
+  if pct exec "$ctid" -- bash -c "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && /usr/local/bin/helm list -A 2>/dev/null | grep -q nginx-ingress"; then
+    msg_ok "NGINX Ingress Controller already installed"
+    return 0
+  fi
+  
   msg_start "Installing NGINX Ingress Controller"
   pct exec "$ctid" -- bash -c "
     export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
@@ -419,24 +445,33 @@ install_ohmyzsh() {
   local ctid="$1"
   local hostname="$2"
   
-  msg_start "Installing base packages on ${hostname}"
-  pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl ca-certificates git telnet zsh"
-  msg_ok_nl "Installed base packages on ${hostname}"
+  # Check if base packages are already installed
+  if pct exec "$ctid" -- bash -c "which curl git telnet zsh" &>/dev/null; then
+    msg_ok "Base packages already installed on ${hostname}"
+  else
+    msg_start "Installing base packages on ${hostname}"
+    pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl ca-certificates git telnet zsh"
+    msg_ok_nl "Installed base packages on ${hostname}"
+  fi
   
-  msg_start "Installing Oh My Zsh on ${hostname}"
-  pct exec "$ctid" -- bash -c '
-    export RUNZSH=no
-    export CHSH=no
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-  '
+  # Check if Oh My Zsh is already installed
+  if pct exec "$ctid" -- test -d /root/.oh-my-zsh 2>/dev/null; then
+    msg_ok "Oh My Zsh already installed on ${hostname}"
+  else
+    msg_start "Installing Oh My Zsh on ${hostname}"
+    pct exec "$ctid" -- bash -c '
+      export RUNZSH=no
+      export CHSH=no
+      sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    '
+    msg_ok_nl "Installed Oh My Zsh on ${hostname}"
+  fi
   
-  # Set fino theme
-  pct exec "$ctid" -- bash -c 'sed -i "s/ZSH_THEME=\"robbyrussell\"/ZSH_THEME=\"fino\"/" ~/.zshrc'
+  # Ensure fino theme is set
+  pct exec "$ctid" -- bash -c 'sed -i "s/ZSH_THEME=\"robbyrussell\"/ZSH_THEME=\"fino\"/" ~/.zshrc' 2>/dev/null || true
   
-  # Set zsh as default shell
-  pct exec "$ctid" -- chsh -s /bin/zsh root
-  
-  msg_ok_nl "Installed Oh My Zsh with fino theme on ${hostname}"
+  # Ensure zsh is default shell
+  pct exec "$ctid" -- chsh -s /bin/zsh root 2>/dev/null || true
 }
 
 cleanup_on_error() {
