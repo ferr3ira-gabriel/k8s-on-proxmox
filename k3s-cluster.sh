@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
 # K3s Kubernetes Cluster on Proxmox LXC
+# 
+# Author: Gabriel Ferreira (@ferr3ira-gabriel)
+# GitHub: https://github.com/ferr3ira-gabriel/k8s-on-proxmox
+#
 # Based on tutorial by Garrett Mills
 # https://medium.com/better-programming/rancher-k3s-kubernetes-on-proxmox-containers-2228100e2d13
 #
-# Copyright (c) 2024
+# Copyright (c) 2024 Gabriel Ferreira
 # License: MIT
 # 
 # This script creates a K3s Kubernetes cluster with:
@@ -13,6 +17,15 @@
 # Running on Proxmox LXC containers
 
 REPO_URL="https://raw.githubusercontent.com/ferr3ira-gabriel/k8s-on-proxmox/main"
+
+# Set whiptail colors for better readability
+export NEWT_COLORS='
+root=,black
+window=,black
+border=white,black
+textbox=white,black
+button=black,white
+'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 
 # Source helper functions (local or remote)
