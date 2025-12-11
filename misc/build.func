@@ -390,8 +390,15 @@ install_helm() {
   ensure_curl_installed "$ctid"
   
   msg_start "Installing Helm"
-  pct exec "$ctid" -- bash -c "curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
-  msg_ok_nl "Installed Helm"
+  pct exec "$ctid" -- bash -c "export PATH=\$PATH:/usr/local/bin && curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
+  
+  # Verify installation
+  if pct exec "$ctid" -- /usr/local/bin/helm version &>/dev/null; then
+    msg_ok_nl "Installed Helm"
+  else
+    msg_error "Helm installation failed"
+    return 1
+  fi
 }
 
 install_nginx_ingress() {
@@ -400,6 +407,7 @@ install_nginx_ingress() {
   msg_start "Installing NGINX Ingress Controller"
   pct exec "$ctid" -- bash -c "
     export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    export PATH=\$PATH:/usr/local/bin
     helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
     helm repo update
     helm install nginx-ingress ingress-nginx/ingress-nginx --set controller.publishService.enabled=true

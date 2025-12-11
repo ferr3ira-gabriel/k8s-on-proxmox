@@ -134,6 +134,12 @@ check_container_status() {
     is_control)
       pct exec "$ctid" -- test -f /var/lib/rancher/k3s/server/node-token 2>/dev/null
       ;;
+    has_helm)
+      pct exec "$ctid" -- test -f /usr/local/bin/helm 2>/dev/null
+      ;;
+    has_packages)
+      pct exec "$ctid" -- which git curl telnet zsh &>/dev/null
+      ;;
   esac
 }
 
@@ -209,8 +215,11 @@ show_status() {
     echo -e "    ${CROSS} Phase 3: ${PHASES[3]}"
   fi
   
-  # Check Phase 4: Oh My Zsh installed
-  if [[ $last_phase -ge 3 ]] && check_container_status "$CONTROL_CTID" has_zsh; then
+  # Check Phase 4: Oh My Zsh installed on ALL nodes
+  if [[ $last_phase -ge 3 ]] && \
+     check_container_status "$CONTROL_CTID" has_zsh && \
+     check_container_status "$WORKER1_CTID" has_zsh && \
+     check_container_status "$WORKER2_CTID" has_zsh; then
     echo -e "    ${CM} Phase 4: ${PHASES[4]}"
     last_phase=4
   elif [[ $last_phase -ge 3 ]]; then
@@ -234,12 +243,29 @@ show_status() {
   fi
   
   # Check Phase 7: Helm/NGINX
-  if [[ $last_phase -ge 6 ]] && pct exec "$CONTROL_CTID" -- which helm &>/dev/null; then
+  if [[ $last_phase -ge 6 ]] && check_container_status "$CONTROL_CTID" has_helm; then
     echo -e "    ${CM} Phase 7: ${PHASES[7]}"
     last_phase=7
   elif [[ $last_phase -ge 6 ]]; then
     echo -e "    ${CROSS} Phase 7: ${PHASES[7]}"
   fi
+  
+  # Show detailed node info
+  echo -e "\n  ${YW}Node Details:${CL}"
+  for role in "control:$CONTROL_CTID:control.k8s" "worker1:$WORKER1_CTID:worker-1.k8s" "worker2:$WORKER2_CTID:worker-2.k8s"; do
+    IFS=':' read -r name ctid hostname <<< "$role"
+    if [[ -n "$ctid" ]] && check_container_status "$ctid" running; then
+      local zsh_status="${RD}no${CL}"
+      local k3s_status="${RD}no${CL}"
+      local pkgs_status="${RD}no${CL}"
+      
+      check_container_status "$ctid" has_zsh && zsh_status="${GN}yes${CL}"
+      check_container_status "$ctid" has_k3s && k3s_status="${GN}yes${CL}"
+      check_container_status "$ctid" has_packages && pkgs_status="${GN}yes${CL}"
+      
+      echo -e "    ${TAB}${hostname}: zsh=${zsh_status} k3s=${k3s_status} packages=${pkgs_status}"
+    fi
+  done
   
   echo ""
   if [[ $last_phase -lt 7 ]]; then
