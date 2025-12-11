@@ -233,29 +233,47 @@ KMSGEOF'
   
   pct exec "$ctid" -- chmod +x /usr/local/bin/conf-kmsg.sh
   
-  # Create systemd service
+  # Create systemd service that runs BEFORE k3s
   pct exec "$ctid" -- bash -c 'cat > /etc/systemd/system/conf-kmsg.service << "SVCEOF"
 [Unit]
 Description=Make sure /dev/kmsg exists
+DefaultDependencies=no
+Before=sysinit.target k3s.service k3s-agent.service
+After=systemd-tmpfiles-setup-dev.service
 
 [Service]
-Type=simple
+Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/bin/conf-kmsg.sh
-TimeoutStartSec=0
 
 [Install]
-WantedBy=default.target
+WantedBy=sysinit.target
 SVCEOF'
   
   # Enable and start the service
   pct exec "$ctid" -- systemctl daemon-reload 2>/dev/null || sleep 2
-  pct exec "$ctid" -- systemctl enable --now conf-kmsg 2>/dev/null || true
+  pct exec "$ctid" -- systemctl enable conf-kmsg 2>/dev/null || true
   
-  # Run the script manually as fallback
+  # Run immediately to create /dev/kmsg now
   pct exec "$ctid" -- /usr/local/bin/conf-kmsg.sh 2>/dev/null || true
   
-  msg_ok "Set up /dev/kmsg in container ${ctid}"
+  # Verify kmsg exists
+  if pct exec "$ctid" -- test -e /dev/kmsg; then
+    msg_ok "Set up /dev/kmsg in container ${ctid}"
+  else
+    msg_warn "/dev/kmsg creation may have failed in container ${ctid}"
+  fi
+}
+
+ensure_kmsg_exists() {
+  local ctid="$1"
+  
+  if ! pct exec "$ctid" -- test -e /dev/kmsg 2>/dev/null; then
+    msg_info "Creating /dev/kmsg in container ${ctid}"
+    pct exec "$ctid" -- ln -sf /dev/console /dev/kmsg
+    pct exec "$ctid" -- mount --make-rshared / 2>/dev/null || true
+    msg_ok "Created /dev/kmsg in container ${ctid}"
+  fi
 }
 
 wait_for_container() {
@@ -335,6 +353,7 @@ install_k3s_control() {
   local node_name="$2"
   
   ensure_curl_installed "$ctid"
+  ensure_kmsg_exists "$ctid"
   
   msg_start "Installing K3s control plane on ${node_name}"
   pct exec "$ctid" -- bash -c "curl -sfL https://get.k3s.io | sh -s - --disable traefik --node-name ${node_name}"
@@ -358,6 +377,7 @@ install_k3s_worker() {
   local token="$4"
   
   ensure_curl_installed "$ctid"
+  ensure_kmsg_exists "$ctid"
   
   msg_start "Joining worker ${node_name} to cluster"
   pct exec "$ctid" -- bash -c "curl -sfL https://get.k3s.io | K3S_URL=https://${control_ip}:6443 K3S_TOKEN=${token} sh -s - --node-name ${node_name}"
