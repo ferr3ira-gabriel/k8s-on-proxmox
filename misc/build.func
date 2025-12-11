@@ -103,12 +103,19 @@ download_template() {
   local storage="$1"
   local template="$2"
   
-  if ! pveam list "$storage" 2>/dev/null | grep -q "$template"; then
-    msg_info "Downloading template ${template}"
-    pveam download "$storage" "$template" &>/dev/null
+  # Check if template already exists (use || true to prevent exit on no match)
+  if pveam list "$storage" 2>/dev/null | grep -q "$template" 2>/dev/null; then
+    msg_ok "Template ${template} already available"
+    return 0
+  fi
+  
+  msg_info "Downloading template ${template}"
+  echo ""  # New line for download progress
+  if pveam download "$storage" "$template"; then
     msg_ok "Downloaded template ${template}"
   else
-    msg_ok "Template ${template} already available"
+    msg_error "Failed to download template ${template}"
+    return 1
   fi
 }
 

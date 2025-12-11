@@ -87,17 +87,30 @@ show_config_summary() {
 
 collect_settings() {
   # Storage selection
+  local storage_list
+  storage_list=$(pvesm status -content rootdir 2>/dev/null | awk 'NR>1 {print $1, $1}') || true
+  
+  if [[ -z "$storage_list" ]]; then
+    msg_error "No storage available for containers"
+    exit 1
+  fi
+  
   STORAGE=$(whiptail --backtitle "K3s on Proxmox LXC" --title "STORAGE" --menu \
     "Select storage for containers:" 12 50 4 \
-    $(pvesm status -content rootdir 2>/dev/null | awk 'NR>1 {print $1, $1}') \
+    $storage_list \
     3>&1 1>&2 2>&3) || exit 1
+  
+  # Update template list
+  msg_info "Updating template list"
+  pveam update &>/dev/null || true
+  msg_ok "Template list updated"
   
   # Template selection/download
   local available_templates
-  available_templates=$(pveam available --section system 2>/dev/null | grep -E "debian-12" | awk '{print $2}' | head -5)
+  available_templates=$(pveam available --section system 2>/dev/null | grep -E "debian-12" | awk '{print $2}' | head -5) || true
   
   if [[ -z "$available_templates" ]]; then
-    msg_error "No Debian 12 templates available"
+    msg_error "No Debian 12 templates available. Run 'pveam update' first."
     exit 1
   fi
   
@@ -106,7 +119,7 @@ collect_settings() {
     $(echo "$available_templates" | while read t; do echo "$t $t"; done) \
     3>&1 1>&2 2>&3) || exit 1
   
-  download_template "$STORAGE" "$var_os_template"
+  download_template "$STORAGE" "$var_os_template" || exit 1
   
   # Network configuration
   GATEWAY=$(whiptail --backtitle "K3s on Proxmox LXC" --title "GATEWAY" --inputbox \
