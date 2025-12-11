@@ -125,7 +125,8 @@ EOF
 
 get_next_ct_id() {
   local start_id=${1:-100}
-  while pct status "$start_id" &>/dev/null; do
+  # Check both LXC containers (pct) and QEMU VMs (qm)
+  while pct status "$start_id" &>/dev/null || qm status "$start_id" &>/dev/null; do
     ((start_id++))
   done
   echo "$start_id"
