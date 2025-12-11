@@ -464,7 +464,11 @@ collect_settings() {
 }
 
 run_phase_1() {
-  echo -e "\n${BL}Phase 1: Creating LXC Containers${CL}\n"
+  echo ""
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${BL}  Phase 1: Creating LXC Containers${CL}"
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo ""
   
   create_lxc_container "$CONTROL_CTID" "control.k8s" "$var_os_template" "$STORAGE" "$TEMPLATE_STORAGE" \
     "$var_control_cpu" "$var_control_ram" "$var_control_disk" \
@@ -483,7 +487,11 @@ run_phase_1() {
 }
 
 run_phase_2() {
-  echo -e "\n${BL}Phase 2: Configuring LXC Containers for K3s${CL}\n"
+  echo ""
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${BL}  Phase 2: Configuring LXC Containers for K3s${CL}"
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo ""
   
   configure_lxc_for_k3s "$CONTROL_CTID"
   configure_lxc_for_k3s "$WORKER1_CTID"
@@ -491,7 +499,11 @@ run_phase_2() {
 }
 
 run_phase_3() {
-  echo -e "\n${BL}Phase 3: Starting Containers & Setup${CL}\n"
+  echo ""
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${BL}  Phase 3: Starting Containers & Setup${CL}"
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo ""
   
   for ctid in "$CONTROL_CTID" "$WORKER1_CTID" "$WORKER2_CTID"; do
     if [[ "$(pct status "$ctid" 2>/dev/null | awk '{print $2}')" != "running" ]]; then
@@ -516,7 +528,11 @@ ensure_containers_running() {
 }
 
 run_phase_4() {
-  echo -e "\n${BL}Phase 4: Installing Oh My Zsh on All Nodes${CL}\n"
+  echo ""
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${BL}  Phase 4: Installing Oh My Zsh on All Nodes${CL}"
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo ""
   
   ensure_containers_running
   
@@ -526,7 +542,11 @@ run_phase_4() {
 }
 
 run_phase_5() {
-  echo -e "\n${BL}Phase 5: Installing K3s Control Plane${CL}\n"
+  echo ""
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${BL}  Phase 5: Installing K3s Control Plane${CL}"
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo ""
   
   ensure_containers_running
   
@@ -541,7 +561,11 @@ run_phase_5() {
 run_phase_6() {
   local control_ip_clean="${CONTROL_IP%/*}"
   
-  echo -e "\n${BL}Phase 6: Joining Worker Nodes${CL}\n"
+  echo ""
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${BL}  Phase 6: Joining Worker Nodes${CL}"
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo ""
   
   ensure_containers_running
   
@@ -557,7 +581,11 @@ run_phase_6() {
 }
 
 run_phase_7() {
-  echo -e "\n${BL}Phase 7: Installing Additional Components${CL}\n"
+  echo ""
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo -e "${BL}  Phase 7: Installing Additional Components${CL}"
+  echo -e "${BL}══════════════════════════════════════════════════════════════${CL}"
+  echo ""
   
   ensure_containers_running
   
