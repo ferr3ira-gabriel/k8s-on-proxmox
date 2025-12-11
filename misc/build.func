@@ -93,6 +93,36 @@ check_proxmox() {
   fi
 }
 
+load_kernel_modules() {
+  msg_info "Loading required kernel modules on host"
+  
+  # Required modules for K3s/K8s networking
+  local modules=("br_netfilter" "overlay" "ip_tables" "ip6_tables" "nf_nat" "xt_conntrack")
+  
+  for mod in "${modules[@]}"; do
+    if ! lsmod | grep -q "^${mod}"; then
+      modprobe "$mod" 2>/dev/null || true
+    fi
+  done
+  
+  # Persist modules across reboots
+  for mod in "${modules[@]}"; do
+    if ! grep -q "^${mod}$" /etc/modules 2>/dev/null; then
+      echo "$mod" >> /etc/modules
+    fi
+  done
+  
+  # Set required sysctl params on host
+  cat > /etc/sysctl.d/99-k3s.conf << 'EOF'
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward = 1
+EOF
+  sysctl --system &>/dev/null || true
+  
+  msg_ok "Loaded required kernel modules on host"
+}
+
 get_next_ct_id() {
   local start_id=${1:-100}
   while pct status "$start_id" &>/dev/null; do

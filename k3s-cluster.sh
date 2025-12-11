@@ -678,6 +678,7 @@ main() {
   # Pre-flight checks
   check_root
   check_proxmox
+  load_kernel_modules
   
   # Check for required commands
   if ! command -v whiptail &>/dev/null; then
