@@ -336,13 +336,13 @@ ensure_curl_installed() {
   
   if ! pct exec "$ctid" -- which curl &>/dev/null; then
     msg_start "Installing curl and certificates on container ${ctid}"
-    pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl ca-certificates"
+    pct exec "$ctid" -- bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates"
     msg_ok_nl "Installed curl and certificates on container ${ctid}"
   else
     # Ensure CA certificates are installed even if curl exists
     if ! pct exec "$ctid" -- dpkg -l ca-certificates &>/dev/null; then
       msg_start "Installing CA certificates on container ${ctid}"
-      pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y ca-certificates"
+      pct exec "$ctid" -- bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y --no-install-recommends ca-certificates"
       msg_ok_nl "Installed CA certificates on container ${ctid}"
     fi
   fi
@@ -450,7 +450,7 @@ install_ohmyzsh() {
     msg_ok "Base packages already installed on ${hostname}"
   else
     msg_start "Installing base packages on ${hostname}"
-    pct exec "$ctid" -- bash -c "apt-get update && apt-get install -y curl ca-certificates git telnet zsh"
+    pct exec "$ctid" -- bash -c "export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y --no-install-recommends curl ca-certificates git telnet zsh"
     msg_ok_nl "Installed base packages on ${hostname}"
   fi
   
