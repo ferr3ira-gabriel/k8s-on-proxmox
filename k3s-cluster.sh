@@ -21,8 +21,10 @@ REPO_URL="https://raw.githubusercontent.com/ferr3ira-gabriel/k8s-on-proxmox/main
 # Set whiptail colors (Proxmox style with black text for readability)
 export NEWT_COLORS='
 root=black,blue
+roottext=black,blue
 window=black,lightgray
 border=black,lightgray
+title=black,lightgray
 textbox=black,lightgray
 button=black,cyan
 listbox=black,lightgray
