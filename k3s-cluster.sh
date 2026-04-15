@@ -550,10 +550,39 @@ collect_settings() {
     var_install_nginx="no"
   fi
   
-  # Get container IDs
-  CONTROL_CTID=$(get_next_ct_id 100)
-  WORKER1_CTID=$(get_next_ct_id $((CONTROL_CTID + 1)))
-  WORKER2_CTID=$(get_next_ct_id $((WORKER1_CTID + 1)))
+  # Container IDs — let user pick, defaulting to next cluster-wide free IDs
+  local default_control_id default_worker1_id default_worker2_id
+  default_control_id=$(get_next_ct_id 100)
+  default_worker1_id=$(get_next_ct_id $((default_control_id + 1)))
+  default_worker2_id=$(get_next_ct_id $((default_worker1_id + 1)))
+
+  CONTROL_CTID=$(whiptail --backtitle "K3s on Proxmox LXC" --title "CONTROL PLANE CT ID" --inputbox \
+    "Enter Control Plane container ID:" 10 50 "$default_control_id" \
+    3>&1 1>&2 2>&3) || exit 1
+
+  if ! [[ "$CONTROL_CTID" =~ ^[0-9]+$ ]] || ! is_ct_id_available "$CONTROL_CTID"; then
+    msg_error "CT ID ${CONTROL_CTID} is invalid or already in use cluster-wide"
+    exit 1
+  fi
+
+  WORKER1_CTID=$(whiptail --backtitle "K3s on Proxmox LXC" --title "WORKER 1 CT ID" --inputbox \
+    "Enter Worker 1 container ID:" 10 50 "$(get_next_ct_id $((CONTROL_CTID + 1)))" \
+    3>&1 1>&2 2>&3) || exit 1
+
+  if ! [[ "$WORKER1_CTID" =~ ^[0-9]+$ ]] || ! is_ct_id_available "$WORKER1_CTID" || [[ "$WORKER1_CTID" == "$CONTROL_CTID" ]]; then
+    msg_error "CT ID ${WORKER1_CTID} is invalid, duplicated, or already in use"
+    exit 1
+  fi
+
+  WORKER2_CTID=$(whiptail --backtitle "K3s on Proxmox LXC" --title "WORKER 2 CT ID" --inputbox \
+    "Enter Worker 2 container ID:" 10 50 "$(get_next_ct_id $((WORKER1_CTID + 1)))" \
+    3>&1 1>&2 2>&3) || exit 1
+
+  if ! [[ "$WORKER2_CTID" =~ ^[0-9]+$ ]] || ! is_ct_id_available "$WORKER2_CTID" \
+      || [[ "$WORKER2_CTID" == "$CONTROL_CTID" ]] || [[ "$WORKER2_CTID" == "$WORKER1_CTID" ]]; then
+    msg_error "CT ID ${WORKER2_CTID} is invalid, duplicated, or already in use"
+    exit 1
+  fi
 }
 
 run_phase_1() {
